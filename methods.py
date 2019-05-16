@@ -1,1 +1,0 @@
-../infogan/methods.py
