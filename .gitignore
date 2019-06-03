@@ -1,3 +1,5 @@
-
+.ipynyb_checkpoints/
+__pycache__/
 *.fit
 lrg
+.DS_Store
