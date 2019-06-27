@@ -11,9 +11,12 @@ from torchvision import transforms
 import PIL.Image as Image
 from PIL import ImageFilter
 
+from skimage import measure
+
 class LRG(data.Dataset):
-    def __init__(self, sz=64, use_kittler=False, n_aug=10, twice=False, catalog_dir='catalog/mrt-table3.txt', file_dir='lrg', file_ext='fits', blur=False):
+    def __init__(self, sz=64, use_kittler=False, n_aug=10, twice=False, catalog_dir='catalog/mrt-table3.txt', file_dir='lrg', file_ext='fits', blur=False, remove_noisy=True):
         self.blur = blur
+        self.remove_noisy = remove_noisy
         self.catalog_dir = catalog_dir
         self.file_dir = file_dir
         self.file_ext = file_ext
@@ -50,12 +53,20 @@ class LRG(data.Dataset):
             continue
 
           if(math.isnan( l )): continue
-          labels.append(int(l))
 
           f_name = '{0}/{1}.{2}'.format(directory, names[i].replace('.','_'), ext)
           im = readImg(f_name, normalize=True, sz=128)
-          if self.use_kittler : im = kittler_float(im, copy=False)
+          if self.use_kittler : 
+            im = kittler_float(im, copy=False)
+            if(self.remove_noisy):
+              if(np.median(im) > 0.0): continue
+              ls = measure.label(im > 0)
+              ngroups = len(np.bincount(ls.flat))
+              if ngroups > 10 : continue
+
           images.append(im.T)
+          labels.append(int(l))
+
           sys.stdout.write('LRG:\t{}/{}\r'.format(i + 1, len(names)))
           sys.stdout.flush()
         print('')

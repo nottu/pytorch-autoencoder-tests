@@ -56,17 +56,17 @@ def train_step_b_vae_cap(model, device, data_loader, optim, epoch, loss_fun, log
         ######### check against known class #########
         #############################################
         #########    Compact vs Extended    #########
-        ext_loss = compact_extended_loss(target, output[1][:,0], device)
-        # #########       FRI vs FRII         #########
-        fr_loss = fri_frii_loss(target, output[1][:, 1], device)
-        #########   Try to learn rotation   #########
-        if learn_rot :
-          rot = torch.sigmoid(output[1][:,-1])
-          data = rotate_tensor(data, rot).to(device)
+        # ext_loss = compact_extended_loss(target, output[1][:,0], device)
+        # # #########       FRI vs FRII         #########
+        # fr_loss = fri_frii_loss(target, output[1][:, 1], device)
+        # #########   Try to learn rotation   #########
+        # if learn_rot :
+        #   rot = torch.sigmoid(output[1][:,-1])
+        #   data = rotate_tensor(data, rot).to(device)
 
         # BCE Loss
         c, r_loss , g_loss = loss_fun(output, data)
-        loss = r_loss + g_loss + 20 * (ext_loss + fr_loss)# + reg_loss)
+        loss = r_loss + g_loss #+ 20 * (ext_loss + fr_loss)#
         #Backpropagation
         loss.backward()
         optim.step()
