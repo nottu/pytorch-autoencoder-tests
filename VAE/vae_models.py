@@ -57,7 +57,7 @@ class VAE(nn.Module):
         return d, mu, var
 
 class RotVAE(VAE):
-    def __init__(self, lt_dim = 4, k=[1, 16, 32, 32, 64, 64]):
+    def __init__(self, lt_dim, k):
         super(RotVAE, self).__init__(lt_dim, k)
         self.fc_mu = nn.Sequential(
                       nn.Linear(self.k[-1] * 2 * 2, (lt_dim + 1) * 2),

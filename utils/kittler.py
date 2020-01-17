@@ -30,7 +30,7 @@ def Kittler(im, n_bit=8):
     idx = np.argmin(v)
     t = g[idx]
     out = np.zeros_like(im)
-    out[im >= t] = m_v - 1
+    out[im > t] = m_v - 1
     return out
 
 def kittler_float(im, copy=True):

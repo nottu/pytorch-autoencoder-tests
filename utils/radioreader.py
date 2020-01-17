@@ -31,7 +31,7 @@ def readImg(img, normalize=False, sz=False):
   if normalize : f = __normalize_img(f) if normalize else f
   if sz : f = sk_rescale(f, (sz/f.shape[0], sz/f.shape[1]), mode='reflect', multichannel=None, anti_aliasing=False)
 
-  return np.nan_to_num(f, copy=False)
+  return np.nan_to_num(f, copy=False)[::-1]
 
 def __transpose_mtx(mtx):
     return [[mtx[i][j] for i in range(len(mtx))] for j in range(len(mtx[0]))]
