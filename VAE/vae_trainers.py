@@ -43,7 +43,8 @@ def train_step_b_vae_cap(model, device, data_loader, optim, epoch, loss_fun, log
     model.train()
     s = ''
     r_loss = 0
-    batch_sum = 0 
+    batch_sum = 0
+    avg_r_loss = 0
     for batch_idx, (data, target) in enumerate(data_loader):
         batch_sum += len(data)
         data = data.to(device)
@@ -56,9 +57,9 @@ def train_step_b_vae_cap(model, device, data_loader, optim, epoch, loss_fun, log
         ######### check against known class #########
         #############################################
         #########    Compact vs Extended    #########
-        # ext_loss = compact_extended_loss(target, output[1][:,0], device)
+        ext_loss = compact_extended_loss(target, output[1][:,0], device)
         # # #########       FRI vs FRII         #########
-        # fr_loss = fri_frii_loss(target, output[1][:, 1], device)
+        fr_loss = fri_frii_loss(target, output[1][:, 1], device)
         # #########   Try to learn rotation   #########
         # if learn_rot :
         #   rot = torch.sigmoid(output[1][:,-1])
@@ -66,17 +67,18 @@ def train_step_b_vae_cap(model, device, data_loader, optim, epoch, loss_fun, log
 
         # BCE Loss
         c, r_loss , g_loss = loss_fun(output, data)
-        loss = r_loss + g_loss #+ 20 * (ext_loss + fr_loss)#
+        loss = r_loss + g_loss + 20 * (ext_loss + fr_loss)#
+        avg_r_loss += r_loss.item()
         #Backpropagation
         loss.backward()
         optim.step()
         s = 'Train Epoch: {:3d} [{:5d}/{:5d} ({:3.0f}%)]   Loss: {:4.4f}   R_Loss: {:4.4f}   Capacity: {:4.2f}'
         s = s.format(epoch, batch_sum, len(data_loader.dataset),
-                100. * batch_idx / len(data_loader), loss.item(), r_loss.item(), c)
+                100. * batch_idx / len(data_loader), loss.item()/len(data), r_loss.item()/len(data), c)
         if batch_idx % log_interval == 0:
             sys.stdout.write('{}\r'.format(s))
             sys.stdout.flush()
-    return s, r_loss.item()
+    return s, avg_r_loss / batch_sum
 
 def train_step_b_vae(model, device, data_loader, optim, epoch, loss_fun, log_interval=5, learn_rot=False):
     model.train()
@@ -123,7 +125,10 @@ def train_step_b_vae(model, device, data_loader, optim, epoch, loss_fun, log_int
 def test_step_b_vae_cap(model, device, data_loader, loss_fun, learn_rot=False):
     model.train()
     r_loss = 0
+    avg_r_loss = 0
+    batch_sum = 0 
     for batch_idx, (data, target) in enumerate(data_loader):
+        batch_sum += len(data)
         with torch.no_grad():
             data = data.to(device)
             #Forward Pass
@@ -134,7 +139,8 @@ def test_step_b_vae_cap(model, device, data_loader, loss_fun, learn_rot=False):
               data = rotate_tensor(data, rot).to(device)
             # BCE Loss
             c, r_loss , g_loss = loss_fun(output, data)
-    return r_loss.item()
+            avg_r_loss += r_loss.item()
+    return avg_r_loss / batch_sum
 
 def test_step_b_vae(model, device, data_loader, loss_fun, learn_rot=False):
     model.train()

@@ -38,5 +38,6 @@ class B_VAE_Loss_cap(B_VAE_Loss):
         return self.capacity
     def __call__(self, res, img):
         recon, kld = super(B_VAE_Loss_cap, self).__call__(res, img)
+        #KLD is already multiplied by gamma in parent method!!!
         return self.capacity, recon, (kld - self.gamma * self.capacity).abs()
 

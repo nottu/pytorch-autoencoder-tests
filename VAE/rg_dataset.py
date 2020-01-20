@@ -5,18 +5,18 @@ from utils.radioreader import *
 from utils.methods import *
 from utils.kittler import kittler_float
 
-from torch.utils import data
+from torch import utils
 from torchvision import transforms
 
 import PIL.Image as Image
 from PIL import ImageFilter
 
 from skimage import measure
+import numpy as np
+from sklearn.model_selection import train_test_split
 
-
-
-class LRG(data.Dataset):
-    def __init__(self, sz=64, rd_sz=128, use_kittler=False, n_aug=10, catalog_dir='catalog/mrt-table3.txt', file_dir='lrg', file_ext='fits', blur=False, remove_noisy=True):
+class LRG(utils.data.Dataset):
+    def __init__(self, sz=64, rd_sz=128, use_kittler=False, n_aug=10, crop_factor=0.8, catalog_dir='catalog/mrt-table3.txt', file_dir='lrg', file_ext='fits', blur=False, remove_noisy=True):
         self.blur = blur
         self.rd_sz = rd_sz
         self.remove_noisy = remove_noisy
@@ -31,7 +31,7 @@ class LRG(data.Dataset):
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.RandomRotation(180),
-            # transforms.CenterCrop(80),
+            transforms.CenterCrop(int( rd_sz * crop_factor)),
             transforms.Resize(sz),
             transforms.ToTensor()])
 
@@ -88,9 +88,8 @@ class LRG(data.Dataset):
         index = index % self.data_len
         np_arr = self.data[index, :]
         y = self.labels[index]
-        ## reshape np_arr to 28x28
-        np_arr = np_arr.reshape(128, 128)
 
+        np_arr = np_arr.reshape(self.rd_sz, self.rd_sz)
         ## convert to PIL-image
         img = Image.fromarray((np_arr*255).astype('uint8'))
         if self.blur : img = img.filter(ImageFilter.BLUR)
@@ -99,8 +98,44 @@ class LRG(data.Dataset):
     def __len__(self):
         return self.data_len * self.n_aug
 
-class BasicDataset(data.Dataset):
-  def __init__(self, images, labels, sz=64, n_aug=10, rotation=10):
+
+def get_datasets(sz=64, rd_sz=128):
+  data_path = '../data/'
+  lrg_data_set   = LRG(sz=sz, rd_sz=rd_sz,use_kittler=True, n_aug=1, blur=True, catalog_dir=data_path + 'catalog/mrt-table3.txt', file_dir=data_path + 'lrg')
+
+  x, y = lrg_data_set.get_data()
+  X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.33, random_state=42)
+
+  def get_balanced_set(data, labels):
+
+    l = np.array(labels)
+    sort_order = np.argsort(l)
+
+    #sort_stuff!
+    l = l[sort_order]
+    data = data[sort_order]
+
+    compact  = l == 0
+    extended = l > 0
+
+    labels_compact = (1 * (l > 0)).tolist()
+
+    return BalancedDataSet(data, labels_compact, sz=sz)
+
+  return {'train':get_balanced_set(X_train, y_train), 'test': get_balanced_set(X_test, y_test), 'full': lrg_data_set}
+
+# data_loader_lrg   = utils.data.DataLoader(compact_v_extended_set,   batch_size=128, shuffle=False)
+# for i, (data, target) in enumerate(data_loader_lrg):
+class BalancedDataSet(utils.data.Dataset):
+  ''' 
+    Made for just two classes that need to be balanced i.e. have a similar number of items
+    Params similar to LRG
+    images : loaded images, should be sorted by label
+    labels : labels sorted
+    n_aug : base/minimum number of augmentations
+  '''
+  def __init__(self, images, labels, sz=64, n_aug=10, rotation=180, crop_factor=0.8):
+    super(BalancedDataSet, self).__init__()
     self.sz = sz
     self.n_aug = n_aug
     self.data = images
@@ -110,7 +145,58 @@ class BasicDataset(data.Dataset):
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),
         transforms.RandomRotation(rotation),
-        # transforms.CenterCrop(80),
+        transforms.CenterCrop(self.data.shape[1] * crop_factor),
+        transforms.Resize(self.sz),
+        transforms.ToTensor()])
+
+    self.num_pos = np.sum(labels)
+    self.num_neg = len(labels) - self.num_pos
+    neg_aug = (self.num_pos * n_aug) // self.num_neg
+
+    self.num_pos_aug = self.num_pos * n_aug 
+    self.num_neg_aug = neg_aug * self.num_neg
+
+
+  def get_data(self):
+    return self.data, self.labels
+
+  def __getitem__(self, index):
+    if index < self.num_neg_aug:
+      index = index % self.num_neg
+      if self.labels[index] :
+        print('Warning: Selecting negative when it should be positive')
+    else:
+      index = index - self.num_neg
+      index = index % self.num_pos
+      index = index + self.num_neg
+      if self.labels[index] == 0:
+        print('Warning: Selecting positive when it should be negative')
+
+    np_arr = self.data[index, :]
+    y = self.labels[index]
+
+    np_arr = np_arr.reshape(self.data.shape[1], self.data.shape[2])
+
+    ## convert to PIL-image
+    img = Image.fromarray((np_arr*255).astype('uint8'))
+
+    return self.transform(img), y
+
+  def __len__(self):
+      return self.num_pos_aug + self.num_neg_aug
+
+class BasicDataset(utils.data.Dataset):
+  def __init__(self, images, labels, sz=64, n_aug=10, rotation=180, crop_factor=0.8):
+    self.sz = sz
+    self.n_aug = n_aug
+    self.data = images
+    self.labels = labels
+    self.data_len = len(self.data)
+    self.transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(rotation),
+        transforms.CenterCrop(self.data.shape[1] * crop_factor),
         transforms.Resize(self.sz),
         transforms.ToTensor()])
 
@@ -121,8 +207,7 @@ class BasicDataset(data.Dataset):
       index = index % self.data_len
       np_arr = self.data[index, :]
       y = self.labels[index]
-      ## reshape np_arr to 28x28
-      # print(self.data.shape)
+
       np_arr = np_arr.reshape(self.data.shape[1], self.data.shape[2])
 
       ## convert to PIL-image
